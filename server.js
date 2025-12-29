@@ -3,37 +3,15 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
-const { createLogger, format, transports } = require('winston');
 
-// Initialize Express
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Logger Configuration
-const logger = createLogger({
-  level: 'info',
-  format: format.combine(
-    format.timestamp(),
-    format.errors({ stack: true }),
-    format.json()
-  ),
-  transports: [
-    new transports.File({ filename: 'error.log', level: 'error' }),
-    new transports.File({ filename: 'combined.log' }),
-    new transports.Console({
-      format: format.combine(
-        format.colorize(),
-        format.simple()
-      )
-    })
-  ]
-});
 
 // Validate Environment Variables
 const requiredEnvVars = ['PAYHERO_AUTH_TOKEN', 'CHANNEL_ID'];
 requiredEnvVars.forEach(varName => {
   if (!process.env[varName]) {
-    logger.error(`❌ Missing required environment variable: ${varName}`);
+    console.error(`❌ Missing required environment variable: ${varName}`);
     process.exit(1);
   }
 });
@@ -41,47 +19,18 @@ requiredEnvVars.forEach(varName => {
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
-
-// Request logging middleware
-app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.url}`, {
-    ip: req.ip,
-    userAgent: req.get('User-Agent')
-  });
-  next();
-});
 
 // PayHero API Configuration
 const PAYHERO_CONFIG = {
   baseURL: process.env.PAYHERO_BASE_URL || 'https://backend.payhero.co.ke/api/v2',
-  timeout: 30000,
   headers: {
     'Authorization': process.env.PAYHERO_AUTH_TOKEN,
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
+    'Content-Type': 'application/json'
   }
 };
 
-// Create Axios instance
 const payheroClient = axios.create(PAYHERO_CONFIG);
-
-// Response interceptor for logging
-payheroClient.interceptors.response.use(
-  response => {
-    logger.info(`PayHero API Success: ${response.config.method} ${response.config.url}`);
-    return response;
-  },
-  error => {
-    logger.error(`PayHero API Error: ${error.config?.method} ${error.config?.url}`, {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
-    return Promise.reject(error);
-  }
-);
 
 // Utility Functions
 function formatPhoneNumber(phone) {
@@ -98,7 +47,7 @@ function formatPhoneNumber(phone) {
   }
   
   if (formatted.length !== 12) {
-    throw new Error('Invalid phone number length');
+    throw new Error('Invalid phone number length. Use 254XXXXXXXXX format');
   }
   
   return formatted;
@@ -115,10 +64,10 @@ function validateAmount(amount) {
   if (numAmount > 150000) {
     throw new Error('Maximum amount is KES 150,000');
   }
-  return numAmount.toFixed(2);
+  return numAmount; // Return as number, not string
 }
 
-// In-memory storage for transactions (use database in production)
+// Store transactions
 const transactions = new Map();
 
 // Serve Frontend
@@ -130,33 +79,26 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// API Routes
-
-// 1. Health Check
-app.get('/api/health', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      service: 'BERA TECH Payment Gateway',
-      status: 'operational',
-      timestamp: new Date().toISOString(),
-      account_id: process.env.CHANNEL_ID,
-      version: '1.0.0'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Service error'
-    });
-  }
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    service: 'BERA TECH Payment Gateway',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    account_id: process.env.CHANNEL_ID,
+    version: '1.0.0'
+  });
 });
 
-// 2. STK Push (C2B) - REAL PayHero API
+// STK Push (C2B) - FIXED: amount as number
 app.post('/api/stk-push', async (req, res) => {
   try {
+    console.log('📱 Received STK request:', req.body);
+    
     const { phone_number, amount, external_reference, customer_name } = req.body;
 
-    // Validation
+    // Validate required fields
     if (!phone_number || !amount) {
       return res.status(400).json({
         success: false,
@@ -166,13 +108,13 @@ app.post('/api/stk-push', async (req, res) => {
 
     // Format and validate inputs
     const formattedPhone = formatPhoneNumber(phone_number);
-    const validatedAmount = validateAmount(amount);
+    const validatedAmount = validateAmount(amount); // This returns a number
     
-    const reference = external_reference || `BERA-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    const reference = external_reference || `BERA${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
-    // PayHero API Payload
+    // PayHero API Payload - amount as NUMBER
     const payload = {
-      amount: validatedAmount,
+      amount: validatedAmount, // NUMBER, not string
       phone_number: formattedPhone,
       channel_id: process.env.CHANNEL_ID,
       provider: process.env.DEFAULT_PROVIDER || 'm-pesa',
@@ -181,71 +123,71 @@ app.post('/api/stk-push', async (req, res) => {
       description: 'Payment to BERA TECH'
     };
 
-    logger.info('STK Push Request:', payload);
+    console.log('📤 Sending to PayHero:', payload);
 
-    // Make request to PayHero
-    const response = await payheroClient.post('/payments', payload);
-    
-    // Store transaction
-    const transaction = {
-      id: reference,
-      type: 'C2B',
-      status: 'PENDING',
-      amount: parseFloat(validatedAmount),
-      phone: formattedPhone,
-      customer_name: payload.customer_name,
-      timestamp: new Date().toISOString(),
-      payhero_response: response.data,
-      last_checked: new Date().toISOString()
-    };
-    
-    transactions.set(reference, transaction);
-
-    logger.info('STK Push Success:', { reference, status: response.data?.status });
-
-    res.json({
-      success: true,
-      message: 'STK push initiated successfully',
-      data: {
-        reference: reference,
+    try {
+      // Make request to PayHero
+      const response = await payheroClient.post('/payments', payload);
+      console.log('✅ PayHero Response:', response.data);
+      
+      // Store transaction
+      const transaction = {
+        id: reference,
+        type: 'C2B',
         status: 'PENDING',
-        message: 'Check your phone for M-Pesa prompt',
-        transaction: {
-          id: reference,
-          amount: validatedAmount,
-          phone: formattedPhone,
-          timestamp: transaction.timestamp
+        amount: validatedAmount,
+        phone: formattedPhone,
+        customer_name: payload.customer_name,
+        timestamp: new Date().toISOString(),
+        payhero_response: response.data
+      };
+      
+      transactions.set(reference, transaction);
+
+      res.json({
+        success: true,
+        message: 'STK push initiated successfully',
+        data: {
+          reference: reference,
+          status: 'PENDING',
+          message: 'Check your phone for M-Pesa prompt',
+          transaction: {
+            id: reference,
+            amount: validatedAmount,
+            phone: formattedPhone,
+            timestamp: transaction.timestamp
+          }
         }
+      });
+      
+    } catch (payheroError) {
+      console.error('❌ PayHero API Error:', payheroError.response?.data || payheroError.message);
+      
+      let errorMessage = 'Failed to initiate payment';
+      if (payheroError.response?.data?.error_message) {
+        errorMessage = payheroError.response.data.error_message;
+      } else if (payheroError.response?.data?.message) {
+        errorMessage = payheroError.response.data.message;
       }
-    });
+      
+      res.status(payheroError.response?.status || 500).json({
+        success: false,
+        error: errorMessage,
+        details: payheroError.response?.data || null
+      });
+    }
 
   } catch (error) {
-    logger.error('STK Push Failed:', error.response?.data || error.message);
+    console.error('❌ STK Push Error:', error.message);
     
-    let errorMessage = 'Failed to initiate payment';
-    let statusCode = 500;
-    
-    if (error.response) {
-      statusCode = error.response.status;
-      errorMessage = error.response.data?.message || error.response.data?.error || errorMessage;
-    } else if (error.request) {
-      errorMessage = 'Network error - Could not reach PayHero API';
-    } else if (error.message.includes('Phone number')) {
-      statusCode = 400;
-      errorMessage = error.message;
-    } else if (error.message.includes('Amount')) {
-      statusCode = 400;
-      errorMessage = error.message;
-    }
-    
-    res.status(statusCode).json({
+    res.status(400).json({
       success: false,
-      error: errorMessage
+      error: error.message || 'Invalid request data'
     });
   }
 });
 
-// 3. Transaction Status - REAL PayHero API
+// Transaction Status - FIXED
 app.get('/api/transaction-status/:reference', async (req, res) => {
   try {
     const { reference } = req.params;
@@ -257,63 +199,68 @@ app.get('/api/transaction-status/:reference', async (req, res) => {
       });
     }
 
-    logger.info('Checking transaction status:', reference);
+    console.log('🔍 Checking status for:', reference);
 
-    // Check with PayHero API
-    const response = await payheroClient.get(`/payments/${reference}/status`);
-    
-    // Update local transaction
-    const transaction = transactions.get(reference);
-    if (transaction) {
-      transaction.status = response.data.status || 'UNKNOWN';
-      transaction.last_checked = new Date().toISOString();
-      transaction.payhero_response = response.data;
-    }
-
-    logger.info('Status Check Result:', { reference, status: response.data?.status });
-
-    res.json({
-      success: true,
-      data: {
-        reference: reference,
-        status: response.data.status || 'UNKNOWN',
-        amount: response.data.amount,
-        phone_number: response.data.phone_number,
-        description: response.data.description,
-        timestamp: response.data.timestamp || new Date().toISOString(),
-        payhero_data: response.data
+    try {
+      // Check with PayHero API
+      const response = await payheroClient.get(`/payments/${reference}/status`);
+      console.log('✅ Status Response:', response.data);
+      
+      // Update local transaction
+      const transaction = transactions.get(reference);
+      if (transaction) {
+        transaction.status = response.data.status || 'UNKNOWN';
+        transaction.last_checked = new Date().toISOString();
+        transaction.payhero_response = response.data;
       }
-    });
 
-  } catch (error) {
-    logger.error('Status Check Failed:', error.response?.data || error.message);
-    
-    // If PayHero returns 404, check if we have the transaction locally
-    if (error.response?.status === 404) {
-      const transaction = transactions.get(req.params.reference);
+      res.json({
+        success: true,
+        data: {
+          reference: reference,
+          status: response.data.status || 'UNKNOWN',
+          amount: response.data.amount,
+          phone_number: response.data.phone_number,
+          description: response.data.description,
+          timestamp: response.data.timestamp || new Date().toISOString()
+        }
+      });
+      
+    } catch (payheroError) {
+      console.error('❌ PayHero Status Error:', payheroError.response?.data || payheroError.message);
+      
+      // Check local transaction if PayHero fails
+      const transaction = transactions.get(reference);
       if (transaction) {
         return res.json({
           success: true,
           data: {
-            reference: transaction.id,
-            status: transaction.status,
+            reference: reference,
+            status: transaction.status || 'UNKNOWN',
             amount: transaction.amount,
             phone_number: transaction.phone,
             timestamp: transaction.timestamp,
-            note: 'Transaction found in local cache'
+            note: 'From local cache'
           }
         });
       }
+      
+      res.status(payheroError.response?.status || 500).json({
+        success: false,
+        error: payheroError.response?.data?.message || 'Failed to check status'
+      });
     }
-    
-    res.status(error.response?.status || 500).json({
+
+  } catch (error) {
+    console.error('❌ Status Check Error:', error);
+    res.status(500).json({
       success: false,
-      error: error.response?.data?.message || 'Failed to check transaction status'
+      error: 'Server error'
     });
   }
 });
 
-// 4. Withdrawal (B2C) - REAL PayHero API
+// Withdrawal (B2C) - FIXED: amount as number
 app.post('/api/withdraw', async (req, res) => {
   try {
     const { phone_number, amount, network_code, description } = req.body;
@@ -327,7 +274,7 @@ app.post('/api/withdraw', async (req, res) => {
     }
 
     // Validate network code
-    const validNetworks = ['63902', '63903']; // M-Pesa: 63902, Airtel: 63903
+    const validNetworks = ['63902', '63903'];
     if (!validNetworks.includes(network_code)) {
       return res.status(400).json({
         success: false,
@@ -337,13 +284,13 @@ app.post('/api/withdraw', async (req, res) => {
 
     // Format and validate inputs
     const formattedPhone = formatPhoneNumber(phone_number);
-    const validatedAmount = validateAmount(amount);
+    const validatedAmount = validateAmount(amount); // Number
     
-    const reference = `WDR-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    const reference = `WDR${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
     // PayHero API Payload
     const payload = {
-      amount: validatedAmount,
+      amount: validatedAmount, // NUMBER
       phone_number: formattedPhone,
       network_code: network_code,
       channel: 'mobile',
@@ -353,90 +300,90 @@ app.post('/api/withdraw', async (req, res) => {
       external_reference: reference
     };
 
-    logger.info('Withdrawal Request:', payload);
+    console.log('📤 Sending withdrawal to PayHero:', payload);
 
-    // Make request to PayHero
-    const response = await payheroClient.post('/withdraw', payload);
-    
-    // Store transaction
-    const transaction = {
-      id: reference,
-      type: 'B2C',
-      status: 'PROCESSING',
-      amount: parseFloat(validatedAmount),
-      phone: formattedPhone,
-      network: network_code === '63902' ? 'M-Pesa' : 'Airtel',
-      description: payload.description,
-      timestamp: new Date().toISOString(),
-      payhero_response: response.data,
-      last_checked: new Date().toISOString()
-    };
-    
-    transactions.set(reference, transaction);
-
-    logger.info('Withdrawal Success:', { reference, status: response.data?.status });
-
-    res.json({
-      success: true,
-      message: 'Withdrawal initiated successfully',
-      data: {
-        reference: reference,
+    try {
+      const response = await payheroClient.post('/withdraw', payload);
+      console.log('✅ Withdrawal Response:', response.data);
+      
+      // Store transaction
+      const transaction = {
+        id: reference,
+        type: 'B2C',
         status: 'PROCESSING',
-        message: 'Withdrawal is being processed',
-        transaction: {
-          id: reference,
-          amount: validatedAmount,
-          phone: formattedPhone,
-          network: network_code === '63902' ? 'M-Pesa' : 'Airtel',
-          timestamp: transaction.timestamp
+        amount: validatedAmount,
+        phone: formattedPhone,
+        network: network_code === '63902' ? 'M-Pesa' : 'Airtel',
+        description: payload.description,
+        timestamp: new Date().toISOString(),
+        payhero_response: response.data
+      };
+      
+      transactions.set(reference, transaction);
+
+      res.json({
+        success: true,
+        message: 'Withdrawal initiated successfully',
+        data: {
+          reference: reference,
+          status: 'PROCESSING',
+          message: 'Withdrawal is being processed',
+          transaction: {
+            id: reference,
+            amount: validatedAmount,
+            phone: formattedPhone,
+            network: network_code === '63902' ? 'M-Pesa' : 'Airtel',
+            timestamp: transaction.timestamp
+          }
         }
-      }
-    });
+      });
+      
+    } catch (payheroError) {
+      console.error('❌ PayHero Withdrawal Error:', payheroError.response?.data || payheroError.message);
+      
+      res.status(payheroError.response?.status || 500).json({
+        success: false,
+        error: payheroError.response?.data?.message || 'Failed to initiate withdrawal'
+      });
+    }
 
   } catch (error) {
-    logger.error('Withdrawal Failed:', error.response?.data || error.message);
+    console.error('❌ Withdrawal Error:', error.message);
     
-    res.status(error.response?.status || 500).json({
+    res.status(400).json({
       success: false,
-      error: error.response?.data?.message || 'Failed to initiate withdrawal'
+      error: error.message || 'Invalid request data'
     });
   }
 });
 
-// 5. Get All Transactions
+// Get All Transactions
 app.get('/api/transactions', (req, res) => {
   try {
-    const { type, limit = 50 } = req.query;
+    const transactionList = Array.from(transactions.values())
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 50);
     
-    let transactionList = Array.from(transactions.values())
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    if (type && ['C2B', 'B2C'].includes(type)) {
-      transactionList = transactionList.filter(t => t.type === type);
-    }
-    
-    // Calculate statistics
-    const allTransactions = Array.from(transactions.values());
     const stats = {
-      total: allTransactions.length,
-      c2b: allTransactions.filter(t => t.type === 'C2B').length,
-      b2c: allTransactions.filter(t => t.type === 'B2C').length,
-      successful: allTransactions.filter(t => t.status === 'SUCCESS').length,
-      failed: allTransactions.filter(t => t.status === 'FAILED').length,
-      pending: allTransactions.filter(t => ['PENDING', 'PROCESSING'].includes(t.status)).length,
-      total_amount: allTransactions.reduce((sum, t) => sum + (t.amount || 0), 0)
+      total: transactions.size,
+      c2b: Array.from(transactions.values()).filter(t => t.type === 'C2B').length,
+      b2c: Array.from(transactions.values()).filter(t => t.type === 'B2C').length,
+      successful: Array.from(transactions.values()).filter(t => t.status === 'SUCCESS').length,
+      failed: Array.from(transactions.values()).filter(t => t.status === 'FAILED').length,
+      pending: Array.from(transactions.values()).filter(t => ['PENDING', 'PROCESSING'].includes(t.status)).length,
+      total_amount: Array.from(transactions.values()).reduce((sum, t) => sum + (t.amount || 0), 0)
     };
 
     res.json({
       success: true,
       data: {
-        transactions: transactionList.slice(0, parseInt(limit)),
+        transactions: transactionList,
         statistics: stats,
         timestamp: new Date().toISOString()
       }
     });
   } catch (error) {
-    logger.error('Get Transactions Error:', error);
+    console.error('Get Transactions Error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve transactions'
@@ -444,7 +391,49 @@ app.get('/api/transactions', (req, res) => {
   }
 });
 
-// 6. Clear Transaction (for testing)
+// Transaction Fees
+app.get('/api/transaction-fees', async (req, res) => {
+  try {
+    const { amount } = req.query;
+    
+    if (amount) {
+      const amountNum = parseFloat(amount);
+      if (!isNaN(amountNum) && amountNum > 0) {
+        // PayHero fee structure (approximate)
+        const fee = Math.max(10, amountNum * 0.015); // 1.5% or min 10 KES
+        const calculatedFees = {
+          amount: amountNum,
+          fee: fee,
+          total: amountNum + fee,
+          net_receive: amountNum - fee,
+          breakdown: [
+            { name: 'Transaction Amount', amount: amountNum },
+            { name: 'Processing Fee (1.5%)', amount: fee }
+          ]
+        };
+        
+        return res.json({
+          success: true,
+          data: { calculated: calculatedFees }
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: { calculated: null }
+    });
+    
+  } catch (error) {
+    console.error('Fee Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate fees'
+    });
+  }
+});
+
+// Clear Transaction (for testing)
 app.delete('/api/transactions/:reference', (req, res) => {
   try {
     const { reference } = req.params;
@@ -462,66 +451,12 @@ app.delete('/api/transactions/:reference', (req, res) => {
   }
 });
 
-// 7. Transaction Fees
-app.get('/api/transaction-fees', async (req, res) => {
-  try {
-    const { amount } = req.query;
-    
-    // Fetch fee structure from PayHero (no auth required)
-    const response = await axios.get('https://backend.payhero.co.ke/api/transaction_fees', {
-      timeout: 10000
-    });
-    
-    let calculatedFees = null;
-    if (amount) {
-      const amountNum = parseFloat(amount);
-      if (!isNaN(amountNum) && amountNum > 0) {
-        // Calculate fees based on PayHero's structure
-        const fee = Math.max(10, amountNum * 0.015); // 1.5% or minimum 10 KES
-        calculatedFees = {
-          amount: amountNum,
-          fee: fee,
-          total: amountNum + fee,
-          net_receive: amountNum - fee,
-          breakdown: [
-            { name: 'Transaction Amount', amount: amountNum },
-            { name: 'Processing Fee (1.5% + min KES 10)', amount: fee }
-          ]
-        };
-      }
-    }
-
-    res.json({
-      success: true,
-      data: {
-        fee_schedule: response.data,
-        calculated: calculatedFees
-      }
-    });
-  } catch (error) {
-    logger.error('Fee Check Error:', error.message);
-    
-    // Return default fee structure if API fails
-    res.json({
-      success: true,
-      data: {
-        fee_schedule: {
-          mpesa: { percentage: 1.5, minimum: 10, maximum: 1000 },
-          airtel: { percentage: 1.5, minimum: 10, maximum: 1000 }
-        },
-        calculated: null
-      }
-    });
-  }
-});
-
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
-  logger.error('Server Error:', err);
+  console.error('🔥 Server Error:', err);
   res.status(500).json({
     success: false,
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    error: 'Internal server error'
   });
 });
 
@@ -535,18 +470,16 @@ app.use((req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  logger.info('🚀 BERA TECH Payment Gateway Started');
-  logger.info('===============================');
-  logger.info(`📍 Port: ${PORT}`);
-  logger.info(`🔑 Account ID: ${process.env.CHANNEL_ID}`);
-  logger.info(`📱 Provider: ${process.env.DEFAULT_PROVIDER || 'm-pesa'}`);
-  logger.info('📊 Services:');
-  logger.info('   • STK Push (C2B) - REAL');
-  logger.info('   • Wallet Withdrawals (B2C) - REAL');
-  logger.info('   • Transaction Status - REAL');
-  logger.info('   • Fee Calculation');
-  logger.info(`🌐 Frontend: http://localhost:${PORT}`);
-  logger.info(`🔧 Admin: http://localhost:${PORT}/admin`);
-  logger.info(`❤️  Health: http://localhost:${PORT}/api/health`);
-  logger.info('✅ READY FOR PRODUCTION');
+  console.log('🚀 BERA TECH Payment Gateway Started');
+  console.log('===============================');
+  console.log(`📍 Port: ${PORT}`);
+  console.log(`🔑 Account ID: ${process.env.CHANNEL_ID}`);
+  console.log(`📱 Provider: ${process.env.DEFAULT_PROVIDER || 'm-pesa'}`);
+  console.log('📊 Services:');
+  console.log('   • STK Push (C2B) - REAL PayHero API');
+  console.log('   • Wallet Withdrawals (B2C) - REAL PayHero API');
+  console.log('   • Transaction Status - REAL PayHero API');
+  console.log(`🌐 Frontend: http://localhost:${PORT}`);
+  console.log(`🔧 Admin: http://localhost:${PORT}/admin`);
+  console.log(`❤️  Health: http://localhost:${PORT}/api/health`);
 });
