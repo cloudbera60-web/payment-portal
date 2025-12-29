@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BERA TECH | Secure M-Pesa Payments</title>
+    <style>
+        /* Reset & Base Styles */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        /* Navigation */
+        .navbar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        
+        /* Hero Section */
+        .hero {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+        }
+        
+        .hero-title {
+            font-size: 2.5rem;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        
+        .hero-subtitle {
+            color: #7f8c8d;
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto 25px;
+        }
+        
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+        
+        .card-header h2 {
+            color: #2c3e50;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* Forms */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .form-input, .form-select {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .btn-block {
+            width: 100%;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(52, 152, 219, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #2c3e50;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #1a252f;
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        /* Results */
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #3498db;
+            background: #f8f9fa;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .result.success {
+            border-left-color: #27ae60;
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .result.error {
+            border-left-color: #e74c3c;
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        /* Footer */
+        .footer {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 30px 0;
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 15px;
+            }
+            
+            .hero {
+                padding: 30px 20px;
+            }
+            
+            .hero-title {
+                font-size: 2rem;
+            }
+            
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                🛡️ BERA TECH
+            </div>
+            <div class="nav-links">
+                <a href="/admin">
+                    🔐 Admin
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+        <header class="hero">
+            <h1 class="hero-title">
+                ⚡ Secure M-Pesa Payments
+            </h1>
+            <p class="hero-subtitle">
+                Enterprise-grade payment processing by BERA TECH. Fast, secure, and reliable.
+            </p>
+        </header>
+
+        <div class="main-grid">
+            <!-- Payment Form -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📤 Initiate Payment</h2>
+                    <span style="background: #27ae60; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold;">LIVE</span>
+                </div>
+                <form id="paymentForm">
+                    <div class="form-group">
+                        <label>Payment Type</label>
+                        <select id="paymentType" class="form-select" required>
+                            <option value="">Select payment type</option>
+                            <option value="C2B">Customer to Business (C2B)</option>
+                            <option value="B2C">Business to Customer (B2C)</option>
+                            <option value="B2B">Business to Business (B2B)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="tel" id="phone" class="form-input" placeholder="254712345678" required>
+                        <small style="color: #7f8c8d; font-size: 0.85rem; margin-top: 5px; display: block;">Format: 2547XXXXXXXX</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Amount (KES)</label>
+                        <input type="number" id="amount" class="form-input" placeholder="100" min="1" step="0.01" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Customer Name (Optional)</label>
+                        <input type="text" id="customerName" class="form-input" placeholder="John Doe">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Reference (Optional)</label>
+                        <input type="text" id="reference" class="form-input" placeholder="ORDER-001">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+                        <span class="btn-text">🚀 Initiate Payment</span>
+                        <span class="btn-loading" style="display: none;">⏳ Processing...</span>
+                    </button>
+                </form>
+                
+                <div id="paymentResult" class="result"></div>
+            </div>
+
+            <!-- Status Check -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔍 Check Status</h2>
+                </div>
+                <div class="form-group">
+                    <label>Transaction Reference</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="statusReference" class="form-input" placeholder="BERA-C2B-123456" style="flex: 1;">
+                        <button onclick="checkTransactionStatus()" class="btn btn-secondary">
+                            🔍 Check
+                        </button>
+                    </div>
+                </div>
+                <div id="statusResult" class="result"></div>
+            </div>
+
+            <!-- Instructions -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📋 How It Works</h2>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <div style="display: flex; align-items: flex-start; gap: 15px;">
+                        <div style="background: #3498db; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">1</div>
+                        <div>
+                            <h3 style="color: #2c3e50; margin-bottom: 5px;">Select Payment Type</h3>
+                            <p style="color: #7f8c8d;">Choose between C2B, B2C, or B2B payment</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 15px;">
+                        <div style="background: #3498db; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">2</div>
+                        <div>
+                            <h3 style="color: #2c3e50; margin-bottom: 5px;">Enter Details</h3>
+                            <p style="color: #7f8c8d;">Provide phone number and amount in KES</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 15px;">
+                        <div style="background: #3498db; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">3</div>
+                        <div>
+                            <h3 style="color: #2c3e50; margin-bottom: 5px;">Initiate Payment</h3>
+                            <p style="color: #7f8c8d;">STK push sent to the provided number</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 15px;">
+                        <div style="background: #3498db; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">4</div>
+                        <div>
+                            <h3 style="color: #2c3e50; margin-bottom: 5px;">Complete on Phone</h3>
+                            <p style="color: #7f8c8d;">Enter M-Pesa PIN when prompted</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div>
+            <p style="font-size: 1.2rem; font-weight: bold; margin-bottom: 10px;">🛡️ BERA TECH</p>
+            <p>Enterprise Payment Platform • Secure M-Pesa Integration</p>
+            <p style="margin-top: 10px; opacity: 0.8;">© 2024 All rights reserved</p>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '/api';
+
+        // Payment form handler
+        document.getElementById('paymentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnLoading = submitBtn.querySelector('.btn-loading');
+            
+            // Show loading
+            submitBtn.disabled = true;
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'inline';
+            
+            const payload = {
+                phone_number: document.getElementById('phone').value,
+                amount: document.getElementById('amount').value,
+                payment_type: document.getElementById('paymentType').value || 'C2B',
+                external_reference: document.getElementById('reference').value || '',
+                customer_name: document.getElementById('customerName').value || ''
+            };
+            
+            try {
+                showLoading('paymentResult', '🔄 Initiating payment request...');
+                
+                const response = await fetch(`${API_BASE}/stk-push`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    const successMessage = `
+                        ✅ <strong>Payment Initiated Successfully!</strong><br><br>
+                        💳 <strong>Amount:</strong> KES ${payload.amount}<br>
+                        📱 <strong>Phone:</strong> ${payload.phone_number}<br>
+                        🏷️ <strong>Reference:</strong> ${result.data.reference}<br>
+                        ⏳ <strong>Status:</strong> Pending<br><br>
+                        <small>📲 Check your phone for M-Pesa prompt</small>
+                    `;
+                    
+                    showResult('paymentResult', successMessage, true);
+                    
+                    // Update status field
+                    document.getElementById('statusReference').value = result.data.reference;
+                    
+                    // Reset form
+                    e.target.reset();
+                } else {
+                    showResult('paymentResult', `❌ ${result.error}`, false);
+                }
+            } catch (error) {
+                showResult('paymentResult', `❌ Network error: ${error.message}`, false);
+            } finally {
+                submitBtn.disabled = false;
+                btnText.style.display = 'inline';
+                btnLoading.style.display = 'none';
+            }
+        });
+
+        // Check transaction status
+        async function checkTransactionStatus() {
+            const reference = document.getElementById('statusReference').value.trim();
+            
+            if (!reference) {
+                alert('Please enter a transaction reference');
+                return;
+            }
+
+            try {
+                showLoading('statusResult', '🔄 Checking transaction status...');
+                
+                const response = await fetch(`${API_BASE}/transaction-status/${reference}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const data = result.data;
+                    let statusHTML;
+                    
+                    if (data.status === 'Completed') {
+                        statusHTML = `
+                            ✅ <strong>Payment Completed Successfully!</strong><br><br>
+                            🏷️ <strong>Reference:</strong> ${data.reference}<br>
+                            ✅ <strong>Status:</strong> ${data.status}<br>
+                            📅 <strong>Checked:</strong> ${new Date(data.checked_at).toLocaleString()}
+                        `;
+                    } else {
+                        statusHTML = `
+                            ⏳ <strong>Transaction Status</strong><br><br>
+                            🏷️ <strong>Reference:</strong> ${data.reference}<br>
+                            ⏳ <strong>Status:</strong> ${data.status}<br>
+                            📅 <strong>Checked:</strong> ${new Date(data.checked_at).toLocaleString()}<br>
+                            <small>🔄 Transaction is still pending. Check again in a moment.</small>
+                        `;
+                    }
+                    
+                    showResult('statusResult', statusHTML, data.status === 'Completed');
+                } else {
+                    showResult('statusResult', `❌ ${result.error}`, false);
+                }
+            } catch (error) {
+                showResult('statusResult', `❌ Network error: ${error.message}`, false);
+            }
+        }
+
+        // Utility functions
+        function showResult(elementId, content, isSuccess) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = content;
+            element.className = `result ${isSuccess ? 'success' : 'error'}`;
+            element.style.display = 'block';
+        }
+
+        function showLoading(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div>${message}</div>`;
+            element.className = 'result';
+            element.style.display = 'block';
+        }
+
+        // Phone number formatting
+        document.getElementById('phone').addEventListener('blur', function(e) {
+            let phone = e.target.value.trim();
+            if (phone.startsWith('0')) phone = '254' + phone.substring(1);
+            else if (phone.startsWith('+')) phone = phone.substring(1);
+            e.target.value = phone;
+        });
+
+        // Auto-generate reference
+        document.getElementById('reference').addEventListener('focus', function(e) {
+            if (!e.target.value) {
+                const paymentType = document.getElementById('paymentType').value || 'C2B';
+                e.target.value = `BERA-${paymentType}-${Date.now()}`;
+            }
+        });
+    </script>
+</body>
+</html>
